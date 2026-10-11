@@ -110,18 +110,22 @@ class AssignedMissionScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    const Text(
-                      'Kamla Devi (Amma)',
-                      style: TextStyle(
+                    Text(
+                      (emergency.ownerName?.isNotEmpty == true)
+                          ? emergency.ownerName!
+                          : 'Senior Resident in Distress',
+                      style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                         color: AppColors.slate900,
                       ),
                     ),
                     const SizedBox(height: 4),
-                    const Text(
-                      '#42, 3rd Cross, 4th Block, Koramangala, Bengaluru',
-                      style: TextStyle(fontSize: 14, color: AppColors.slate700),
+                    Text(
+                      emergency.notes != null && emergency.notes!.isNotEmpty
+                          ? emergency.notes!
+                          : 'Emergency Signal: Coordinates unlocked',
+                      style: const TextStyle(fontSize: 14, color: AppColors.slate700),
                     ),
                     const SizedBox(height: 12),
                     Row(
@@ -154,7 +158,7 @@ class AssignedMissionScreen extends StatelessWidget {
                   width: double.infinity,
                   child: ElevatedButton.icon(
                     onPressed: () async {
-                      await provider.simulateAcceptAndArrive();
+                      await provider.markArrived();
                     },
                     icon: const Icon(Icons.check_circle, color: Colors.white),
                     label: const Text('Mark Arrived at Scene'),

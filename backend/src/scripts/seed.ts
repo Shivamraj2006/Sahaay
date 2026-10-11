@@ -61,7 +61,7 @@ async function seed() {
     available: true,
     location: {
       type: 'Point',
-      coordinates: [79.0882, 21.1458], // Nagpur — [lng, lat]
+      coordinates: [77.6268, 12.9378], // Koramangala, Bengaluru (~350m from Kamla Devi) — [lng, lat]
     },
     locationUpdatedAt: new Date(),
     completedCount: 5,
@@ -83,7 +83,7 @@ async function seed() {
     available: true,
     location: {
       type: 'Point',
-      coordinates: [79.0890, 21.1465], // Nearby Nagpur — [lng, lat]
+      coordinates: [77.6280, 12.9390], // Koramangala, Bengaluru (~500m away) — [lng, lat]
     },
     locationUpdatedAt: new Date(),
     completedCount: 2,

@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sahaay-backend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+      # Use MongoDB Atlas URI or default to the internal mongodb service
+      - MONGODB_URI=${MONGODB_URI:-mongodb+srv://aritrasarkar505_db_user:aRfcteaKtelKh5ni@cluster0.mzemtwq.mongodb.net/?appName=Cluster0}
+      - JWT_SECRET=${JWT_SECRET:-sahaay-production-jwt-secret-key-replace-in-env}
+      - JWT_EXPIRES_IN=24h
+      - CORS_ORIGIN=*
+      - MATCHING_INITIAL_RADIUS_M=500
+      - MATCHING_SECOND_RADIUS_M=1000
+      - MATCHING_MAX_RADIUS_M=3000
+      # Blockchain configuration (leave blank for MVP simulation mode, or provide RPC + private key)
+      - BLOCKCHAIN_RPC_URL=${BLOCKCHAIN_RPC_URL:-}
+      - BLOCKCHAIN_PRIVATE_KEY=${BLOCKCHAIN_PRIVATE_KEY:-}
+      - BLOCKCHAIN_EMERGENCY_LEDGER_ADDRESS=${BLOCKCHAIN_EMERGENCY_LEDGER_ADDRESS:-0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512}
+      - BLOCKCHAIN_RESPONDER_REGISTRY_ADDRESS=${BLOCKCHAIN_RESPONDER_REGISTRY_ADDRESS:-0x5FbDB2315678afecb367f032d93F642f64180aa3}
+      - BLOCKCHAIN_CHAIN_ID=${BLOCKCHAIN_CHAIN_ID:-31337}
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # Optional local MongoDB container (useful when deploying without MongoDB Atlas)
+  mongodb:
+    image: mongo:7.0
+    container_name: sahaay-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    profiles:
+      - local-db
+
+volumes:
+  mongo_data:

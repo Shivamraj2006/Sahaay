@@ -116,7 +116,9 @@ class _SosSentScreenState extends State<SosSentScreen> {
                       icon: Icons.location_on,
                       iconColor: AppColors.brandRed,
                       title: 'YOUR LOCATION',
-                      value: 'Koramangala, Bengaluru',
+                      value: emergency != null
+                          ? 'GPS: ${emergency.location.latitude.toStringAsFixed(4)}, ${emergency.location.longitude.toStringAsFixed(4)}'
+                          : 'Live GPS Location Shared',
                       subtitleWidget: Row(
                         children: [
                           Container(
@@ -243,10 +245,7 @@ class _SosSentScreenState extends State<SosSentScreen> {
                 ),
               ),
 
-              const SizedBox(height: 24),
-
-              // Interactive Demo Flow Controls (Simulate responder accepting & arriving)
-              _buildDemoControls(provider, emergency),
+              const SizedBox(height: 12),
             ],
           ),
         ),
@@ -273,7 +272,7 @@ class _SosSentScreenState extends State<SosSentScreen> {
         break;
       case EmergencyStatus.assigned:
         title = 'Responder Assigned!';
-        desc = '${emergency.assignedResponder?.displayName ?? "Rahul Sharma"} has accepted your SOS.';
+        desc = '${emergency.assignedResponder?.displayName ?? "A Community Responder"} has accepted your SOS.';
         bg = AppColors.brandSuccessLight;
         border = AppColors.brandSuccessBorder;
         icon = Icons.directions_run;
@@ -391,51 +390,6 @@ class _SosSentScreenState extends State<SosSentScreen> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildDemoControls(EmergencyProvider provider, EmergencyModel? emergency) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.slate50,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.slate200),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Interactive Demo Simulation',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: AppColors.slate600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              ActionChip(
-                label: const Text('Simulate Accept & Arrive'),
-                avatar: const Icon(Icons.play_arrow, size: 16),
-                onPressed: () => provider.simulateAcceptAndArrive(),
-              ),
-              ActionChip(
-                label: const Text('Simulate Resolution'),
-                avatar: const Icon(Icons.check, size: 16),
-                onPressed: () => provider.simulateResolution('ASSISTED'),
-              ),
-              ActionChip(
-                label: const Text('Return to Home'),
-                onPressed: widget.onDismiss,
-              ),
-            ],
-          ),
-        ],
-      ),
     );
   }
 }

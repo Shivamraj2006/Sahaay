@@ -61,7 +61,7 @@ class SettingsScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          user?.displayName ?? 'Kamla Devi (Amma)',
+                          user?.displayName ?? 'User',
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -70,7 +70,7 @@ class SettingsScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          user?.phone ?? '+91 98765 43210',
+                          user?.phone ?? '',
                           style: const TextStyle(
                             fontSize: 13,
                             color: AppColors.slate500,
@@ -87,7 +87,7 @@ class SettingsScreen extends StatelessWidget {
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
-                            user?.role.label ?? 'Elderly User',
+                            user?.role.label ?? 'User',
                             style: const TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
@@ -105,7 +105,7 @@ class SettingsScreen extends StatelessWidget {
             const SizedBox(height: 24),
 
             const Text(
-              'Switch Active Persona (Demo Mode)',
+              'Switch Active Persona',
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.bold,
@@ -115,8 +115,8 @@ class SettingsScreen extends StatelessWidget {
             const SizedBox(height: 10),
 
             _buildPersonaTile(
-              title: 'Kamla Devi (Elderly User)',
-              subtitle: 'Koramangala, Bengaluru (SOS Creator Mode)',
+              title: 'Senior Citizen / Victim Mode',
+              subtitle: 'Emergency SOS Requester',
               isSelected: auth.isElderly,
               onTap: () {
                 auth.switchRole(UserRole.elderlyUser);
@@ -125,8 +125,8 @@ class SettingsScreen extends StatelessWidget {
             const SizedBox(height: 8),
 
             _buildPersonaTile(
-              title: 'Rahul Sharma (Verified Responder)',
-              subtitle: 'Nearby volunteer responding to SOS alerts',
+              title: 'Community Responder Mode',
+              subtitle: 'Active volunteer receiving emergency alerts',
               isSelected: auth.isResponder,
               onTap: () {
                 auth.switchRole(UserRole.volunteer);

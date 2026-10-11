@@ -1,26 +1,28 @@
 import 'package:flutter/foundation.dart';
 
 class AppConfig {
+  /// Base host URL for the Express backend API and Socket.IO.
+  /// Can be overridden at build time via:
+  /// flutter run --dart-define=BACKEND_HOST=https://your-hosted-backend.com
+  static const String _defaultHost = String.fromEnvironment(
+    'BACKEND_HOST',
+    defaultValue: 'http://localhost:3000',
+  );
+
+  static String customHost = _defaultHost;
+
+  static String get host => customHost.endsWith('/')
+      ? customHost.substring(0, customHost.length - 1)
+      : customHost;
+
   /// Base URL for the Express backend API.
-  /// For Android emulator, use 10.0.2.2; for web and desktop, use localhost.
-  static String get apiBaseUrl {
-    if (kIsWeb) return 'http://localhost:3000/api/v1';
-    // When running in Android emulator:
-    return defaultTargetPlatform == TargetPlatform.android
-        ? 'http://10.0.2.2:3000/api/v1'
-        : 'http://localhost:3000/api/v1';
-  }
+  static String get apiBaseUrl => '$host/api/v1';
 
   /// Socket.IO URL
-  static String get socketUrl {
-    if (kIsWeb) return 'http://localhost:3000';
-    return defaultTargetPlatform == TargetPlatform.android
-        ? 'http://10.0.2.2:3000'
-        : 'http://localhost:3000';
-  }
+  static String get socketUrl => host;
 
   /// Timeout for API requests in seconds.
-  static const int apiTimeoutSeconds = 8;
+  static const int apiTimeoutSeconds = 10;
 
   /// Default mock coordinates for elderly testing (Koramangala, Bengaluru).
   static const double defaultElderlyLat = 12.9352;

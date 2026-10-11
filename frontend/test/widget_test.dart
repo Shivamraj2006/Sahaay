@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sahaay_flutter/services/socket_service.dart';
 import 'package:sahaay_flutter/main.dart';
 
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    socketService.enabled = false;
   });
 
   testWidgets('SahaayApp displays Login screen on cold start when unauthenticated',

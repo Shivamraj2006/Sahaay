@@ -61,7 +61,7 @@ export class EmergencyService {
       console.error('[MATCHING] Notification error:', err),
     );
 
-    return this.formatForOwner(emergency);
+    return await this.formatForOwner(emergency);
   }
 
   // ─── Create Guest SOS (Bypass without login) ─────────────────────────
@@ -132,7 +132,7 @@ export class EmergencyService {
     );
 
     return {
-      emergency: this.formatForOwner(emergency),
+      emergency: await this.formatForOwner(emergency),
       user: guestUser.toJSON(),
       token,
     };
@@ -152,8 +152,8 @@ export class EmergencyService {
       throw new ForbiddenError();
     }
 
-    if (isOwner || isAdmin) return this.formatForOwner(emergency);
-    if (isAssigned) return this.formatForAssignedResponder(emergency);
+    if (isOwner || isAdmin) return await this.formatForOwner(emergency);
+    if (isAssigned) return await this.formatForAssignedResponder(emergency);
     return this.formatForResponder(emergency, null);
   }
 
@@ -195,13 +195,19 @@ export class EmergencyService {
       },
     }).limit(20);
 
+    const ownerIds = activeEmergencies.map((e) => e.ownerId);
+    const owners = await User.find({ _id: { $in: ownerIds } });
+    const ownerMap = new Map(owners.map((o) => [o._id.toString(), o.displayName]));
+
     return activeEmergencies.map((e) => {
       const emergencyLoc: LatLng = {
         latitude: e.location.coordinates[1],
         longitude: e.location.coordinates[0],
       };
       const distance = matchingService.calculateDistance(responderLoc, emergencyLoc);
-      return this.formatForResponder(e, distance);
+      const formatted = this.formatForResponder(e, distance);
+      (formatted as any).ownerName = ownerMap.get(e.ownerId.toString()) || 'Senior Resident';
+      return formatted;
     });
   }
 
@@ -245,7 +251,7 @@ export class EmergencyService {
 
     socketService.emitEmergencyCancelled(emergency);
 
-    return this.formatForOwner(emergency);
+    return await this.formatForOwner(emergency);
   }
 
   // ─── Accept (atomic assignment) ───────────────────────────────────────
@@ -300,7 +306,7 @@ export class EmergencyService {
 
     socketService.emitResponderAccepted(emergency);
 
-    return this.formatForAssignedResponder(emergency);
+    return await this.formatForAssignedResponder(emergency);
   }
 
   // ─── Decline ──────────────────────────────────────────────────────────
@@ -375,7 +381,7 @@ export class EmergencyService {
 
     socketService.emitResponderArrived(emergency);
 
-    return this.formatForAssignedResponder(emergency);
+    return await this.formatForAssignedResponder(emergency);
   }
 
   // ─── Resolve ──────────────────────────────────────────────────────────
@@ -442,7 +448,7 @@ export class EmergencyService {
 
     socketService.emitEmergencyResolved(emergency);
 
-    return this.formatForAssignedResponder(emergency);
+    return await this.formatForAssignedResponder(emergency);
   }
 
   // ─── Escalate ─────────────────────────────────────────────────────────
@@ -512,7 +518,7 @@ export class EmergencyService {
       console.error('[MATCHING] Escalation notification error:', err),
     );
 
-    return this.formatForOwner(emergency);
+    return await this.formatForOwner(emergency);
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────────
@@ -570,23 +576,47 @@ export class EmergencyService {
     }
   }
 
-  /** Format for the emergency owner — includes exact location. */
-  private formatForOwner(emergency: IEmergency) {
-    const json = emergency.toJSON();
+  /** Format for the emergency owner — includes exact location and assigned responder details. */
+  private async formatForOwner(emergency: IEmergency) {
+    const json = emergency.toJSON() as any;
     json.location = {
       latitude: emergency.location.coordinates[1],
       longitude: emergency.location.coordinates[0],
     };
+    try {
+      const owner = await User.findById(emergency.ownerId);
+      if (owner?.displayName) {
+        json.ownerName = owner.displayName;
+      }
+      if (emergency.assignedResponderId) {
+        const resp = await User.findById(emergency.assignedResponderId);
+        if (resp) {
+          json.assignedResponder = {
+            id: resp._id.toString(),
+            displayName: resp.displayName,
+            phone: resp.phone,
+            role: resp.role,
+          };
+        }
+      }
+    } catch (_) {}
     return json;
   }
 
-  /** Format for the assigned responder — includes exact location after assignment. */
-  private formatForAssignedResponder(emergency: IEmergency) {
-    const json = emergency.toJSON();
+  /** Format for the assigned responder — includes exact location and resident details. */
+  private async formatForAssignedResponder(emergency: IEmergency) {
+    const json = emergency.toJSON() as any;
     json.location = {
       latitude: emergency.location.coordinates[1],
       longitude: emergency.location.coordinates[0],
     };
+    try {
+      const owner = await User.findById(emergency.ownerId);
+      if (owner?.displayName) {
+        json.ownerName = owner.displayName;
+        json.ownerPhone = owner.phone;
+      }
+    } catch (_) {}
     return json;
   }
 

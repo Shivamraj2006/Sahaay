@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../constants/app_colors.dart';
 import '../../models/emergency.dart';
+import '../../models/user.dart';
 import '../../providers/emergency_provider.dart';
 import '../../providers/contacts_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/location_service.dart';
 import '../../widgets/sos_pulse_button.dart';
 import '../../widgets/contact_card.dart';
 import '../../widgets/contact_options_sheet.dart';
@@ -25,6 +27,14 @@ class ElderlyHomeScreen extends StatefulWidget {
 
 class _ElderlyHomeScreenState extends State<ElderlyHomeScreen> {
   int _currentTabIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      locationService.requestPermission();
+    });
+  }
 
   void _triggerSos(BuildContext context, EmergencyCategory category) {
     final emergencyProvider = context.read<EmergencyProvider>();
@@ -123,7 +133,9 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen> {
     final contactsProvider = context.watch<ContactsProvider>();
     final contacts = contactsProvider.contacts;
     final user = context.watch<AuthProvider>().user;
-    final greetingName = user?.displayName ?? 'Amma 👋';
+    final greetingName = (user?.displayName.isNotEmpty == true)
+        ? '${user!.displayName} 👋'
+        : 'Welcome 👋';
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -155,7 +167,7 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen> {
                         style: const TextStyle(
                           fontSize: 26,
                           fontWeight: FontWeight.w900,
-                          color: AppColors.slate950,
+                          color: AppColors.slate900,
                           letterSpacing: -0.5,
                         ),
                       ),
@@ -172,7 +184,7 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen> {
                   ),
                 ),
                 const SizedBox(width: 12),
-                // Amma Avatar with green online dot
+                // Dynamic User Avatar with green online dot
                 Stack(
                   children: [
                     Container(
@@ -184,20 +196,42 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen> {
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(30),
-                        child: Image.asset(
-                          'assets/images/amma.jpg',
-                          width: 58,
-                          height: 58,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
-                            color: AppColors.slate200,
-                            child: const Icon(
-                              Icons.person,
-                              color: AppColors.slate600,
-                              size: 32,
-                            ),
-                          ),
-                        ),
+                        child: (user?.displayName.toLowerCase().contains('amma') == true ||
+                                user?.displayName.toLowerCase().contains('kamla') == true)
+                            ? Image.asset(
+                                'assets/images/amma.jpg',
+                                width: 58,
+                                height: 58,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => Container(
+                                  color: AppColors.slate200,
+                                  alignment: Alignment.center,
+                                  child: Text(
+                                    user?.displayName.isNotEmpty == true
+                                        ? user!.displayName[0].toUpperCase()
+                                        : 'U',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 22,
+                                      color: AppColors.slate700,
+                                    ),
+                                  ),
+                                ),
+                              )
+                            : Container(
+                                color: AppColors.rose50,
+                                alignment: Alignment.center,
+                                child: Text(
+                                  user?.displayName.isNotEmpty == true
+                                      ? user!.displayName[0].toUpperCase()
+                                      : 'U',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 24,
+                                    color: AppColors.brandRed,
+                                  ),
+                                ),
+                              ),
                       ),
                     ),
                     Positioned(
@@ -218,7 +252,119 @@ class _ElderlyHomeScreenState extends State<ElderlyHomeScreen> {
               ],
             ),
 
-            const SizedBox(height: 36),
+            const SizedBox(height: 16),
+
+            // Mode Banner & Role Switcher
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: user?.isGuest == true ? AppColors.rose50 : AppColors.slate50,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: user?.isGuest == true ? AppColors.brandRedSoft : AppColors.slate200,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    user?.isGuest == true ? Icons.bolt : Icons.elderly,
+                    color: AppColors.brandRed,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      user?.isGuest == true
+                          ? 'Guest Mode (Victim) — Press SOS to alert network'
+                          : 'Senior Citizen Mode — Emergency SOS enabled',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.slate800,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onPressed: () {
+                      context.read<AuthProvider>().switchRole(UserRole.volunteer);
+                    },
+                    child: const Text(
+                      'Responder ➔',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.brandBlue,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 8),
+
+            // Live Location Status Banner
+            ListenableBuilder(
+              listenable: locationService,
+              builder: (context, _) {
+                final hasGps = locationService.state == LocationState.active;
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: hasGps ? AppColors.brandSuccessLight : AppColors.amber50,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: hasGps ? AppColors.brandSuccess : AppColors.amber200,
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        hasGps ? Icons.location_on : Icons.location_searching,
+                        color: hasGps ? AppColors.brandSuccess : AppColors.amber700,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          locationService.statusText,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: hasGps ? AppColors.brandSuccess : AppColors.amber900,
+                          ),
+                        ),
+                      ),
+                      if (!hasGps)
+                        TextButton(
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          onPressed: () => locationService.requestPermission(),
+                          child: const Text(
+                            'Grant GPS',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.brandBlue,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
+            ),
+
+            const SizedBox(height: 28),
 
             // Central Pulsing Big Red SOS Button (Stitch Screen 1)
             Center(

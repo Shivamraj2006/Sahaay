@@ -1,6 +1,8 @@
 import '../models/emergency.dart';
 import '../config/app_config.dart';
 import 'api_client.dart';
+import 'auth_service.dart';
+import 'location_service.dart';
 
 class EmergencyService {
   EmergencyModel? _currentEmergency;
@@ -11,11 +13,7 @@ class EmergencyService {
     LatLngCoordinates? location,
     String? notes,
   }) async {
-    final loc = location ??
-        const LatLngCoordinates(
-          latitude: AppConfig.defaultElderlyLat,
-          longitude: AppConfig.defaultElderlyLng,
-        );
+    final loc = location ?? await locationService.getCurrentLocation();
 
     try {
       final res = await apiClient.post(
@@ -31,10 +29,11 @@ class EmergencyService {
     } catch (e) {
       // Offline fallback: simulated local emergency
       final id = 'emg_${DateTime.now().millisecondsSinceEpoch}';
+      final currentUser = authService.currentUser;
       _currentEmergency = EmergencyModel(
         id: id,
-        ownerId: 'owner_123',
-        ownerName: 'Kamla Devi',
+        ownerId: currentUser?.id ?? 'owner_123',
+        ownerName: currentUser?.displayName ?? 'Senior Resident',
         category: category,
         status: EmergencyStatus.active,
         location: loc,
@@ -83,10 +82,10 @@ class EmergencyService {
           category: _currentEmergency!.category,
           status: EmergencyStatus.assigned,
           location: _currentEmergency!.location,
-          assignedResponder: const AssignedResponder(
-            id: 'resp_rahul',
-            displayName: 'Rahul Sharma',
-            phone: '+91 98765 43211',
+          assignedResponder: AssignedResponder(
+            id: 'resp_online',
+            displayName: authService.currentUser?.displayName ?? 'Community Volunteer',
+            phone: authService.currentUser?.phone ?? '+91 98765 43211',
             role: 'VOLUNTEER',
           ),
           createdAt: _currentEmergency!.createdAt,
@@ -147,6 +146,40 @@ class EmergencyService {
       }
       return _currentEmergency;
     }
+  }
+
+  Future<List<EmergencyModel>> getNearbyEmergencies() async {
+    try {
+      final res = await apiClient.get('/emergencies/nearby');
+      if (res is List) {
+        return res
+            .map((item) => EmergencyModel.fromJson(item as Map<String, dynamic>))
+            .toList();
+      }
+      return [];
+    } catch (_) {
+      if (_currentEmergency != null &&
+          _currentEmergency!.status == EmergencyStatus.active) {
+        return [_currentEmergency!];
+      }
+      return [];
+    }
+  }
+
+  Future<void> updateAvailability(bool isAvailable, {LatLngCoordinates? location}) async {
+    try {
+      final body = <String, dynamic>{'available': isAvailable};
+      if (location != null) {
+        body['location'] = {
+          'latitude': location.latitude,
+          'longitude': location.longitude,
+        };
+      }
+      await apiClient.patch(
+        '/responders/me/availability',
+        body: body,
+      );
+    } catch (_) {}
   }
 
   void clearCurrent() {

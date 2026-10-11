@@ -13,22 +13,45 @@ import { adminRoutes } from './modules/admin/admin.routes';
 import path from 'path';
 import fs from 'fs';
 
+import { isDatabaseConnected } from './config/database';
+
 export function createApp() {
   const app = express();
 
+  // Trust reverse proxies (Cloudflare, Render, AWS ALB, Railway)
+  app.set('trust proxy', 1);
+
   // ─── Global Middleware ──────────────────────────────────────────────
-  app.use(cors());
+  app.use(
+    cors({
+      origin: config.corsOrigin === '*' ? '*' : config.corsOrigin.split(','),
+      credentials: true,
+    }),
+  );
   app.use(express.json({ limit: '1mb' }));
   app.use(requestIdMiddleware);
 
   // ─── Health Check & Docs ────────────────────────────────────────────
-  app.get('/api/v1/health', (_req, res) => {
+  const healthHandler = (_req: express.Request, res: express.Response) => {
     res.json({
       status: 'ok',
+      service: 'sahaay-backend',
       timestamp: new Date().toISOString(),
       version: '1.0.0',
+      database: {
+        connected: isDatabaseConnected(),
+      },
+      blockchain: {
+        mode: config.blockchainMode,
+        ledgerConfigured: !!config.blockchain.emergencyLedgerAddress,
+        chainId: config.blockchain.chainId,
+      },
     });
-  });
+  };
+
+  app.get('/', healthHandler);
+  app.get('/health', healthHandler);
+  app.get('/api/v1/health', healthHandler);
 
   app.get('/api/v1/openapi.json', (_req, res) => {
     const specPath = path.join(__dirname, '../openapi.json');

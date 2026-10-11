@@ -23,6 +23,7 @@ class UserModel {
   final String displayName;
   final String phone;
   final UserRole role;
+  final bool isGuest;
   final DateTime? createdAt;
 
   const UserModel({
@@ -30,6 +31,7 @@ class UserModel {
     required this.displayName,
     required this.phone,
     required this.role,
+    this.isGuest = false,
     this.createdAt,
   });
 
@@ -47,6 +49,7 @@ class UserModel {
       displayName: json['displayName'] ?? '',
       phone: json['phone'] ?? '',
       role: UserRole.fromString(json['role'] ?? 'ELDERLY_USER'),
+      isGuest: json['isGuest'] == true,
       createdAt: json['createdAt'] != null
           ? DateTime.tryParse(json['createdAt'])
           : null,
@@ -59,6 +62,7 @@ class UserModel {
       'displayName': displayName,
       'phone': phone,
       'role': role.value,
+      'isGuest': isGuest,
       'createdAt': createdAt?.toIso8601String(),
     };
   }

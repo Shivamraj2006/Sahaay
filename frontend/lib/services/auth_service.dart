@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
 import 'api_client.dart';
@@ -21,30 +22,24 @@ class AuthService {
       'phone': '+919876543210',
       'password': 'password123',
       'role': UserRole.elderlyUser,
-      'description': 'Elderly resident in Koramangala, Bengaluru (SOS Creator)',
+      'description': 'Senior Citizen (SOS Requester)',
     },
     {
       'name': 'Rahul Sharma',
       'phone': '+919876543211',
       'password': 'password123',
       'role': UserRole.volunteer,
-      'description': 'Verified community volunteer (~350m away)',
-    },
-    {
-      'name': 'Amit Verma',
-      'phone': '+919876543213',
-      'password': 'password123',
-      'role': UserRole.volunteer,
-      'description': 'Verified secondary responder (Race demo)',
-    },
-    {
-      'name': 'Admin User',
-      'phone': '+919876543200',
-      'password': 'password123',
-      'role': UserRole.admin,
-      'description': 'Network administrator & verifier',
+      'description': 'Community Volunteer Responder',
     },
   ];
+
+  /// Normalize phone to +91XXXXXXXXXX
+  static String normalizePhone(String raw) {
+    final digits = raw.replaceAll(RegExp(r'\D'), '');
+    if (digits.length == 10) return '+91$digits';
+    if (digits.length == 12 && digits.startsWith('91')) return '+$digits';
+    return raw.startsWith('+') ? raw : '+$raw';
+  }
 
   /// Load session from SharedPreferences on device
   Future<UserModel?> loadSavedSession() async {
@@ -61,7 +56,7 @@ class AuthService {
         return _currentUser;
       }
     } catch (e) {
-      // Ignore reading error
+      debugPrint('[AUTH] Failed to load saved session: $e');
     }
     return null;
   }
@@ -73,7 +68,7 @@ class AuthService {
       await prefs.setString(_keyToken, token);
       await prefs.setString(_keyUser, jsonEncode(user.toJson()));
     } catch (e) {
-      // Ignore writing error
+      debugPrint('[AUTH] Failed to save session: $e');
     }
   }
 
@@ -89,17 +84,48 @@ class AuthService {
     apiClient.setAuthToken(null);
   }
 
+  /// Register a brand new user into MongoDB database
+  Future<UserModel> register({
+    required String displayName,
+    required String phone,
+    required String password,
+    required UserRole role,
+    bool remember = true,
+  }) async {
+    final cleanPhone = normalizePhone(phone);
+    final res = await apiClient.post(
+      '/auth/register',
+      body: {
+        'displayName': displayName.trim(),
+        'phone': cleanPhone,
+        'password': password,
+        'requestedRole': role.value,
+      },
+    );
+
+    _token = res['token'];
+    apiClient.setAuthToken(_token);
+    _currentUser = UserModel.fromJson(res['user']);
+    if (remember) {
+      await _saveSession(_currentUser!, _token!);
+    }
+    return _currentUser!;
+  }
+
+  /// Login with existing credentials from MongoDB database
   Future<UserModel> login({
     required String phone,
     required String password,
     UserRole? preferredRole,
     bool remember = true,
   }) async {
+    final cleanPhone = normalizePhone(phone);
     try {
       final res = await apiClient.post(
         '/auth/login',
-        body: {'phone': phone, 'password': password},
+        body: {'phone': cleanPhone, 'password': password},
       );
+
       _token = res['token'];
       apiClient.setAuthToken(_token);
       _currentUser = UserModel.fromJson(res['user']);
@@ -108,55 +134,101 @@ class AuthService {
       }
       return _currentUser!;
     } catch (e) {
-      // Offline fallback: check if it matches a preset or create based on preferred role
-      final cleanPhone = phone.trim();
-      final demo = demoAccounts.firstWhere(
+      // Offline / widget test environment fallback for demo accounts
+      final match = demoAccounts.firstWhere(
         (a) => a['phone'] == cleanPhone,
-        orElse: () => {
-          'name': preferredRole == UserRole.volunteer
-              ? 'Rahul Sharma'
-              : 'Kamla Devi (Amma)',
-          'phone': cleanPhone,
-          'role': preferredRole ?? UserRole.elderlyUser,
-        },
+        orElse: () => {},
+      );
+      if (match.isNotEmpty) {
+        final mockUser = UserModel(
+          id: match['role'] == UserRole.elderlyUser ? 'demo_elderly_1' : 'demo_responder_1',
+          displayName: match['name'],
+          phone: match['phone'],
+          role: preferredRole ?? match['role'],
+          createdAt: DateTime.now(),
+        );
+        _currentUser = mockUser;
+        _token = 'mock_jwt_token_${mockUser.id}';
+        apiClient.setAuthToken(_token);
+        if (remember) {
+          await _saveSession(_currentUser!, _token!);
+        }
+        return _currentUser!;
+      }
+      rethrow;
+    }
+  }
+
+  /// Guest bypass session stored in MongoDB database
+  Future<UserModel> guestLogin({String? displayName}) async {
+    final body = <String, dynamic>{};
+    if (displayName != null && displayName.trim().isNotEmpty) {
+      body['displayName'] = displayName.trim();
+    }
+
+    try {
+      final res = await apiClient.post(
+        '/auth/guest',
+        body: body,
       );
 
-      _token = 'mock_jwt_token_${DateTime.now().millisecondsSinceEpoch}';
+      _token = res['token'];
       apiClient.setAuthToken(_token);
-      _currentUser = UserModel(
-        id: 'usr_${cleanPhone.replaceAll('+', '')}',
-        displayName: demo['name'],
-        phone: cleanPhone,
-        role: preferredRole ?? demo['role'],
+      _currentUser = UserModel.fromJson(res['user']);
+      await _saveSession(_currentUser!, _token!);
+      return _currentUser!;
+    } catch (e) {
+      final guest = UserModel(
+        id: 'guest_${DateTime.now().millisecondsSinceEpoch}',
+        displayName: displayName != null && displayName.trim().isNotEmpty
+            ? displayName.trim()
+            : 'Guest User',
+        phone: '',
+        role: UserRole.elderlyUser,
+        isGuest: true,
         createdAt: DateTime.now(),
       );
-      if (remember) {
-        await _saveSession(_currentUser!, _token!);
-      }
+      _currentUser = guest;
+      _token = 'guest_token_${guest.id}';
+      apiClient.setAuthToken(_token);
+      await _saveSession(_currentUser!, _token!);
       return _currentUser!;
     }
+  }
+
+  /// Update user profile display name in MongoDB database
+  Future<UserModel> updateProfile(String newName) async {
+    final res = await apiClient.patch(
+      '/users/me',
+      body: {'displayName': newName.trim()},
+    );
+
+    _currentUser = UserModel.fromJson(res);
+    if (_token != null) {
+      await _saveSession(_currentUser!, _token!);
+    }
+    return _currentUser!;
   }
 
   Future<void> logout() async {
     await clearSavedSession();
   }
 
+  /// Switch persona while preserving real user profile
   void switchPersona(UserRole role) {
-    final demo = demoAccounts.firstWhere(
-      (a) => a['role'] == role,
-      orElse: () => demoAccounts.first,
-    );
-
-    _currentUser = UserModel(
-      id: 'usr_${(demo['phone'] as String).replaceAll('+', '')}',
-      displayName: demo['name'],
-      phone: demo['phone'],
-      role: demo['role'],
-      createdAt: DateTime.now(),
-    );
-    _token = 'mock_jwt_token_switch';
-    apiClient.setAuthToken(_token);
-    _saveSession(_currentUser!, _token!);
+    if (_currentUser != null) {
+      _currentUser = UserModel(
+        id: _currentUser!.id,
+        displayName: _currentUser!.displayName,
+        phone: _currentUser!.phone,
+        role: role,
+        isGuest: _currentUser!.isGuest,
+        createdAt: _currentUser!.createdAt,
+      );
+      if (_token != null) {
+        _saveSession(_currentUser!, _token!);
+      }
+    }
   }
 }
 

@@ -1,11 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../../constants/app_colors.dart';
+import '../../models/emergency.dart';
+import '../../providers/emergency_provider.dart';
 
 class HistoryScreen extends StatelessWidget {
   const HistoryScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final emergencyProvider = context.watch<EmergencyProvider>();
+    final current = emergencyProvider.emergency;
+    final hasResolved = current != null && current.status == EmergencyStatus.resolved;
+
     return Scaffold(
       backgroundColor: AppColors.white,
       appBar: AppBar(
@@ -16,34 +24,61 @@ class HistoryScreen extends StatelessWidget {
         ),
       ),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(20),
-          children: [
-            _buildHistoryItem(
-              title: 'Fall / Injury Assistance',
-              date: '10 Oct 2026, 4:15 PM',
-              outcome: 'Resolved: Assisted by Rahul Sharma',
-              txHash: '0xe9f50cb90e7a1e0b...',
-              isConfirmed: true,
-            ),
-            const SizedBox(height: 12),
-            _buildHistoryItem(
-              title: 'Medical Check Alert',
-              date: '28 Sep 2026, 11:30 AM',
-              outcome: 'Resolved: Assisted by Dr. Meera Iyer',
-              txHash: '0xc1d4e7f9a2b5e8c3...',
-              isConfirmed: true,
-            ),
-            const SizedBox(height: 12),
-            _buildHistoryItem(
-              title: 'Hospital Assistance',
-              date: '14 Sep 2026, 8:45 AM',
-              outcome: 'Referred to Emergency Services (108)',
-              txHash: '0xf8a2c4e6b1d3f5a7...',
-              isConfirmed: true,
-            ),
-          ],
-        ),
+        child: hasResolved
+            ? ListView(
+                padding: const EdgeInsets.all(20),
+                children: [
+                  _buildHistoryItem(
+                    title: '${current.category.label} Assistance',
+                    date: DateFormat('d MMM yyyy, h:mm a').format(current.updatedAt.toLocal()),
+                    outcome: 'Resolved: Assisted by ${current.assignedResponder?.displayName ?? "Volunteer"}',
+                    txHash: current.transactionHash ?? '0x8f2a1b9c3d4e5f607182...',
+                    isConfirmed: true,
+                  ),
+                ],
+              )
+            : Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 72,
+                        height: 72,
+                        decoration: BoxDecoration(
+                          color: AppColors.slate100,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.history,
+                          size: 36,
+                          color: AppColors.slate400,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'No Emergency History',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.slate900,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'You have no past emergency incidents. When SOS events are completed, immutable on-chain logs and cryptographic proofs will be recorded here.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: AppColors.slate500,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
       ),
     );
   }

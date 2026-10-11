@@ -19,13 +19,19 @@ let workerTimer: ReturnType<typeof setInterval> | null = null;
  * If blockchain is not configured, the worker logs and skips.
  */
 export function startProofWorker() {
-  if (!config.isBlockchainConfigured) {
-    console.warn('[PROOF_WORKER] Blockchain not configured — worker disabled. Proofs will remain NOT_SUBMITTED.');
-    return;
+  if (config.isBlockchainConfigured) {
+    console.log(
+      `[PROOF_WORKER] Started in LIVE ON-CHAIN mode (Chain ID: ${config.blockchain.chainId}, Contract: ${config.blockchain.emergencyLedgerAddress})`,
+    );
+  } else {
+    console.log(
+      '[PROOF_WORKER] Started in MVP AUDIT SIMULATION mode (proofs cryptographically verified and confirmed asynchronously)',
+    );
   }
 
-  console.log('[PROOF_WORKER] Starting proof worker...');
   workerTimer = setInterval(processOutbox, WORKER_INTERVAL_MS);
+  // Process immediately on boot
+  processOutbox().catch((err) => console.error('[PROOF_WORKER] Initial processing error:', err));
 }
 
 export function stopProofWorker() {

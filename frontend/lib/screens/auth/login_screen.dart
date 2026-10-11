@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../constants/app_colors.dart';
 import '../../models/user.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/location_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -12,14 +13,25 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  bool _isSignUp = false; // Default to Sign In tab
   UserRole _selectedRole = UserRole.elderlyUser;
-  final _phoneController = TextEditingController(text: '9876543210');
-  final _passwordController = TextEditingController(text: 'password123');
+  final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   bool _rememberMe = true;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      locationService.requestPermission();
+    });
+  }
+
+  @override
   void dispose() {
+    _nameController.dispose();
     _phoneController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -28,17 +40,23 @@ class _LoginScreenState extends State<LoginScreen> {
   void _onRoleChanged(UserRole role) {
     setState(() {
       _selectedRole = role;
-      if (role == UserRole.elderlyUser) {
-        _phoneController.text = '9876543210';
-      } else {
-        _phoneController.text = '9876543211';
-      }
     });
   }
 
-  Future<void> _handleLogin() async {
+  Future<void> _handleSubmit() async {
     final rawPhone = _phoneController.text.trim();
     final password = _passwordController.text.trim();
+    final name = _nameController.text.trim();
+
+    if (_isSignUp && name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter your full name.'),
+          backgroundColor: AppColors.brandRed,
+        ),
+      );
+      return;
+    }
 
     if (rawPhone.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -50,17 +68,52 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
+    if (_isSignUp && password.length < 8) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Password must be at least 8 characters long.'),
+          backgroundColor: AppColors.brandRed,
+        ),
+      );
+      return;
+    }
+
     final formattedPhone = rawPhone.startsWith('+91')
         ? rawPhone
-        : '+91$rawPhone';
+        : '+91${rawPhone.replaceAll(RegExp(r'\D'), '')}';
 
     final auth = context.read<AuthProvider>();
-    await auth.login(
-      phone: formattedPhone,
-      password: password,
-      preferredRole: _selectedRole,
-      remember: _rememberMe,
-    );
+
+    try {
+      if (_isSignUp) {
+        await auth.register(
+          displayName: name,
+          phone: formattedPhone,
+          password: password,
+          role: _selectedRole,
+          remember: _rememberMe,
+        );
+      } else {
+        await auth.login(
+          phone: formattedPhone,
+          password: password,
+          preferredRole: _selectedRole,
+          remember: _rememberMe,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        final errorMsg = e.toString().contains('already exists')
+            ? 'This phone number is already registered. Please tap "Sign In".'
+            : 'Authentication failed: $e';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMsg),
+            backgroundColor: AppColors.brandRed,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -76,7 +129,7 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
 
               // App Emblem & Welcome Header
               Center(
@@ -98,7 +151,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
               const Text(
                 'Welcome to Sahaay',
                 textAlign: TextAlign.center,
@@ -120,9 +173,92 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
 
-              const SizedBox(height: 28),
+              const SizedBox(height: 24),
 
-              // Step 1: Choose Role (Victim vs Responder)
+              // Mode Toggle (Create Account vs Sign In)
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.slate100,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                padding: const EdgeInsets.all(4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _isSignUp = true;
+                          });
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            color: _isSignUp ? AppColors.white : Colors.transparent,
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: _isSignUp
+                                ? [
+                                    BoxShadow(
+                                      color: AppColors.slate900.withOpacity(0.08),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            'Create Account',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: _isSignUp ? FontWeight.bold : FontWeight.w600,
+                              color: _isSignUp ? AppColors.slate900 : AppColors.slate500,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _isSignUp = false;
+                          });
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            color: !_isSignUp ? AppColors.white : Colors.transparent,
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: !_isSignUp
+                                ? [
+                                    BoxShadow(
+                                      color: AppColors.slate900.withOpacity(0.08),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            'Sign In',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: !_isSignUp ? FontWeight.bold : FontWeight.w600,
+                              color: !_isSignUp ? AppColors.slate900 : AppColors.slate500,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // Step 1: Choose Role
               const Text(
                 '1. SELECT YOUR ACCOUNT TYPE',
                 style: TextStyle(
@@ -137,7 +273,6 @@ class _LoginScreenState extends State<LoginScreen> {
               // Role Cards Row
               Row(
                 children: [
-                  // Senior Citizen / Victim Card
                   Expanded(
                     child: _buildRoleCard(
                       role: UserRole.elderlyUser,
@@ -150,7 +285,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  // Responder Card
                   Expanded(
                     child: _buildRoleCard(
                       role: UserRole.volunteer,
@@ -165,12 +299,12 @@ class _LoginScreenState extends State<LoginScreen> {
                 ],
               ),
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
 
               // Step 2: Credentials Form
-              const Text(
-                '2. ENTER CREDENTIALS',
-                style: TextStyle(
+              Text(
+                _isSignUp ? '2. ENTER DETAILS & CREDENTIALS' : '2. ENTER LOGIN CREDENTIALS',
+                style: const TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w800,
                   color: AppColors.slate500,
@@ -178,6 +312,30 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               const SizedBox(height: 10),
+
+              // Name Field (Required for Create Account)
+              if (_isSignUp) ...[
+                TextField(
+                  controller: _nameController,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: InputDecoration(
+                    labelText: 'Full Name',
+                    hintText: 'e.g. Shivam Raj',
+                    prefixIcon: const Icon(Icons.person_outline, color: AppColors.slate500),
+                    filled: true,
+                    fillColor: AppColors.slate50,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: const BorderSide(color: AppColors.slate300),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: const BorderSide(color: AppColors.slate300),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
 
               // Phone Field with +91 Prefix
               Row(
@@ -206,7 +364,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       controller: _phoneController,
                       keyboardType: TextInputType.phone,
                       decoration: const InputDecoration(
-                        hintText: 'Enter 10-digit phone',
+                        hintText: '10-digit phone number',
                         hintStyle: TextStyle(color: AppColors.slate400),
                       ),
                     ),
@@ -214,21 +372,19 @@ class _LoginScreenState extends State<LoginScreen> {
                 ],
               ),
 
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
 
               // Password Field
               TextField(
                 controller: _passwordController,
                 obscureText: _obscurePassword,
                 decoration: InputDecoration(
-                  hintText: 'Enter password',
+                  hintText: _isSignUp ? 'Password (minimum 8 characters)' : 'Enter password',
                   hintStyle: const TextStyle(color: AppColors.slate400),
                   suffixIcon: IconButton(
                     icon: Icon(
-                      _obscurePassword
-                          ? Icons.visibility_outlined
-                          : Icons.visibility_off_outlined,
-                      color: AppColors.slate500,
+                      _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                      color: AppColors.slate400,
                     ),
                     onPressed: () {
                       setState(() {
@@ -239,17 +395,14 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
 
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
 
-              // Remember me checkbox
+              // Remember Session Checkbox
               Row(
                 children: [
                   Checkbox(
                     value: _rememberMe,
                     activeColor: isElderly ? AppColors.brandRed : AppColors.brandBlue,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(4),
-                    ),
                     onChanged: (val) {
                       setState(() {
                         _rememberMe = val ?? true;
@@ -269,19 +422,18 @@ class _LoginScreenState extends State<LoginScreen> {
                 ],
               ),
 
-              const SizedBox(height: 18),
+              const SizedBox(height: 16),
 
-              // Primary Login Button
+              // Primary Action Button (Create Account or Sign In)
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: auth.isLoading ? null : _handleLogin,
+                  onPressed: auth.isLoading ? null : _handleSubmit,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor:
-                        isElderly ? AppColors.brandRed : AppColors.brandBlue,
-                    padding: const EdgeInsets.symmetric(vertical: 18),
+                    backgroundColor: isElderly ? AppColors.brandRed : AppColors.brandBlue,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(16),
                     ),
                   ),
                   child: auth.isLoading
@@ -290,13 +442,15 @@ class _LoginScreenState extends State<LoginScreen> {
                           height: 22,
                           child: CircularProgressIndicator(
                             strokeWidth: 2.5,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            color: Colors.white,
                           ),
                         )
                       : Text(
-                          isElderly
-                              ? 'Sign In as Senior Resident'
-                              : 'Sign In as Community Responder',
+                          _isSignUp
+                              ? 'Create Account & Join Sahaay'
+                              : (isElderly
+                                  ? 'Sign In as Senior Resident'
+                                  : 'Sign In as Community Responder'),
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -305,9 +459,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
 
-              // 1-Tap Quick Demo Fill Section
+              // 1-Tap Quick Demo Credentials Section
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -332,8 +486,14 @@ class _LoginScreenState extends State<LoginScreen> {
                         Expanded(
                           child: OutlinedButton(
                             onPressed: () {
-                              _onRoleChanged(UserRole.elderlyUser);
-                              _handleLogin();
+                              setState(() {
+                                _isSignUp = false;
+                                _selectedRole = UserRole.elderlyUser;
+                                _nameController.text = 'Kamla Devi';
+                                _phoneController.text = '9876543210';
+                                _passwordController.text = 'password123';
+                              });
+                              _handleSubmit();
                             },
                             style: OutlinedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 12),
@@ -355,8 +515,14 @@ class _LoginScreenState extends State<LoginScreen> {
                         Expanded(
                           child: OutlinedButton(
                             onPressed: () {
-                              _onRoleChanged(UserRole.volunteer);
-                              _handleLogin();
+                              setState(() {
+                                _isSignUp = false;
+                                _selectedRole = UserRole.volunteer;
+                                _nameController.text = 'Rahul Sharma';
+                                _phoneController.text = '9876543211';
+                                _passwordController.text = 'password123';
+                              });
+                              _handleSubmit();
                             },
                             style: OutlinedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 12),
@@ -380,7 +546,39 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
 
-              const SizedBox(height: 18),
+              const SizedBox(height: 12),
+
+              // Instant Guest Mode Button
+              Center(
+                child: Column(
+                  children: [
+                    TextButton.icon(
+                      onPressed: () async {
+                        final guestName = _nameController.text.trim().isNotEmpty
+                            ? _nameController.text.trim()
+                            : null;
+                        await auth.guestLogin(displayName: guestName);
+                      },
+                      icon: const Icon(Icons.bolt, color: AppColors.brandRed, size: 20),
+                      label: const Text(
+                        '⚡ Continue as Guest (Senior Citizen / Victim)',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: AppColors.brandRed,
+                        ),
+                      ),
+                    ),
+                    const Text(
+                      'Guests can trigger emergency SOS. To receive & view help requests, create or sign in with a Responder account.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 11, color: AppColors.slate500),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 12),
 
               // Disclaimer
               const Text(
@@ -432,39 +630,30 @@ class _LoginScreenState extends State<LoginScreen> {
           ],
         ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Icon(
-                  icon,
-                  color: isSelected ? activeColor : AppColors.slate400,
-                  size: 28,
-                ),
-                Icon(
-                  isSelected ? Icons.check_circle : Icons.radio_button_unchecked,
-                  color: isSelected ? activeColor : AppColors.slate300,
-                  size: 20,
-                ),
-              ],
+            Icon(
+              icon,
+              color: isSelected ? activeColor : AppColors.slate400,
+              size: 32,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Text(
               title,
+              textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 14,
+                fontSize: 13,
                 fontWeight: FontWeight.bold,
-                color: isSelected ? activeColor : AppColors.slate800,
+                color: isSelected ? activeColor : AppColors.slate700,
                 height: 1.2,
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 3),
             Text(
               subtitle,
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 10,
                 color: isSelected ? activeColor.withOpacity(0.8) : AppColors.slate400,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ],

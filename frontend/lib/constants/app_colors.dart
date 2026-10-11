@@ -40,5 +40,9 @@ class AppColors {
   static const Color slate100 = Color(0xFFF1F5F9);
   static const Color slate50 = Color(0xFFF8FAFC);
   static const Color rose50 = Color(0xFFFFF1F2);
+  static const Color amber50 = Color(0xFFFFFBEB);
+  static const Color amber200 = Color(0xFFFDE68A);
+  static const Color amber700 = Color(0xFFB45309);
+  static const Color amber900 = Color(0xFF78350F);
   static const Color white = Colors.white;
 }

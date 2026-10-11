@@ -27,7 +27,7 @@ async function main() {
 ╠═══════════════════════════════════════════════╣
 ║  Port:       ${String(config.port).padEnd(33)}║
 ║  Env:        ${config.nodeEnv.padEnd(33)}║
-║  Blockchain: ${(config.isBlockchainConfigured ? 'Configured' : 'Not configured').padEnd(33)}║
+║  Blockchain: ${config.blockchainMode.padEnd(33)}║
 ╚═══════════════════════════════════════════════╝
     `);
   });

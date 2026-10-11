@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { config } from '../../config';
 import { User } from '../../models/User';
 import { ResponderProfile } from '../../models/ResponderProfile';
-import { PRIVILEGED_ROLES, RESPONDER_ROLES, Role } from '../../shared/enums';
+import { PRIVILEGED_ROLES, RESPONDER_ROLES, Role, VerificationStatus } from '../../shared/enums';
 import { ConflictError, UnauthorizedError, ValidationError } from '../../shared/errors';
 import { RegisterInput, LoginInput, GuestLoginInput } from './auth.validation';
 
@@ -44,7 +44,18 @@ export class AuthService {
 
     // Auto-create responder profile for responder-eligible roles
     if (RESPONDER_ROLES.has(user.role)) {
-      await ResponderProfile.create({ userId: user._id });
+      await ResponderProfile.create({
+        userId: user._id,
+        verificationStatus:
+          config.nodeEnv === 'development' || config.nodeEnv === 'test'
+            ? VerificationStatus.VERIFIED
+            : VerificationStatus.UNVERIFIED,
+        available: true,
+        location: {
+          type: 'Point',
+          coordinates: [77.6268, 12.9378],
+        },
+      });
     }
 
     const token = this.generateToken(user._id.toString(), user.role, false);

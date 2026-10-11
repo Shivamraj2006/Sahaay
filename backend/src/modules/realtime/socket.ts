@@ -5,6 +5,7 @@ import { config } from '../../config';
 import { AuthUser } from '../../shared/types';
 import { SocketEvent } from '../../shared/enums';
 import { IEmergency } from '../../models/Emergency';
+import { User } from '../../models/User';
 import { matchingService } from '../matching/matching.service';
 
 let io: Server;
@@ -72,13 +73,18 @@ export const socketService = {
   },
 
   /** Notify a specific responder of a new emergency (coarse location only). */
-  emitEmergencyCreated(emergency: IEmergency, responderUserId: string) {
+  async emitEmergencyCreated(emergency: IEmergency, responderUserId: string) {
     if (!io) return;
     const exactLoc = {
       latitude: emergency.location.coordinates[1],
       longitude: emergency.location.coordinates[0],
     };
     const coarse = matchingService.coarsenLocation(exactLoc);
+    let ownerName = 'Senior Resident';
+    try {
+      const owner = await User.findById(emergency.ownerId);
+      if (owner?.displayName) ownerName = owner.displayName;
+    } catch (_) {}
 
     io.to(`user:${responderUserId}`).emit(
       SocketEvent.EMERGENCY_CREATED,
@@ -86,19 +92,38 @@ export const socketService = {
         category: emergency.category,
         status: emergency.status,
         location: coarse,
+        ownerName,
       }),
     );
   },
 
   /** Notify emergency room that a responder accepted. */
-  emitResponderAccepted(emergency: IEmergency) {
+  async emitResponderAccepted(emergency: IEmergency) {
     if (!io) return;
+    let responderName = 'Volunteer Responder';
+    let responderPhone = '';
+    try {
+      if (emergency.assignedResponderId) {
+        const respUser = await User.findById(emergency.assignedResponderId);
+        if (respUser) {
+          responderName = respUser.displayName;
+          responderPhone = respUser.phone;
+        }
+      }
+    } catch (_) {}
+
     io.to(`emergency:${emergency._id}`).to(`user:${emergency.ownerId}`)
       .emit(
         SocketEvent.RESPONDER_ACCEPTED,
         createEnvelope(SocketEvent.RESPONDER_ACCEPTED, emergency, {
           status: emergency.status,
           assignedResponderId: emergency.assignedResponderId?.toString(),
+          assignedResponder: {
+            id: emergency.assignedResponderId?.toString(),
+            displayName: responderName,
+            phone: responderPhone,
+            role: 'VOLUNTEER',
+          },
         }),
       );
   },
