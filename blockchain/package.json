@@ -8,6 +8,7 @@
     "test": "CI=true hardhat test",
     "deploy:local": "CI=true hardhat run scripts/deploy.ts --network localhost",
     "deploy:hardhat": "CI=true hardhat run scripts/deploy.ts",
+    "verify:integration": "CI=true hardhat run scripts/verify-integration.ts",
     "node": "hardhat node"
   },
   "devDependencies": {

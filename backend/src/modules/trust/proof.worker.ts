@@ -99,7 +99,7 @@ async function submitToBlockchain(
     try {
       const provider = new ethers.JsonRpcProvider(config.blockchain.rpcUrl);
       const wallet = new ethers.Wallet(config.blockchain.privateKey, provider);
-      const abi = (await import('../../contracts/EmergencyLedger.json')).default;
+      const abi = require('../../contracts/EmergencyLedger.json');
       const contract = new ethers.Contract(
         config.blockchain.emergencyLedgerAddress,
         abi,
