@@ -1,0 +1,45 @@
+import mongoose, { Schema, Document } from 'mongoose';
+import { Role } from '../shared/enums';
+
+export interface IUser extends Document {
+  displayName: string;
+  phone: string;
+  passwordHash: string;
+  role: Role;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const userSchema = new Schema<IUser>(
+  {
+    displayName: { type: String, required: true, trim: true },
+    phone: {
+      type: String,
+      required: true,
+      unique: true,
+      trim: true,
+      index: true,
+    },
+    passwordHash: { type: String, required: true, select: false },
+    role: {
+      type: String,
+      enum: Object.values(Role),
+      required: true,
+      default: Role.ELDERLY_USER,
+    },
+  },
+  {
+    timestamps: true,
+    toJSON: {
+      transform(_doc, ret: any) {
+        ret.id = ret._id.toString();
+        delete ret._id;
+        delete ret.__v;
+        delete ret.passwordHash;
+        return ret;
+      },
+    },
+  },
+);
+
+export const User = mongoose.model<IUser>('User', userSchema);

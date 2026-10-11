@@ -1,0 +1,787 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Sahaay Community Emergency Response API",
+    "version": "1.0.0",
+    "description": "Authoritative backend API for the Sahaay community emergency-response network for elderly people in urban India. Implements authentication, profile management, emergency lifecycle, proximity matching, verification, and tamper-evident trust outbox."
+  },
+  "servers": [
+    {
+      "url": "/api/v1",
+      "description": "Default API v1 Server"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "JSON Web Token issued by /auth/login or /auth/register"
+      }
+    },
+    "schemas": {
+      "Role": {
+        "type": "string",
+        "enum": [
+          "ELDERLY_USER",
+          "VOLUNTEER",
+          "MEDICAL_PROFESSIONAL",
+          "ORGANIZATION_COORDINATOR",
+          "VERIFIER",
+          "ADMIN"
+        ]
+      },
+      "EmergencyCategory": {
+        "type": "string",
+        "enum": ["MEDICAL", "FALL_INJURY", "HOSPITAL_ASSISTANCE"]
+      },
+      "EmergencyStatus": {
+        "type": "string",
+        "enum": [
+          "ACTIVE",
+          "ASSIGNED",
+          "RESPONDER_ARRIVED",
+          "ESCALATED",
+          "RESOLVED",
+          "CANCELLED"
+        ]
+      },
+      "VerificationStatus": {
+        "type": "string",
+        "enum": ["UNVERIFIED", "PENDING", "VERIFIED", "REVOKED"]
+      },
+      "ProofStatus": {
+        "type": "string",
+        "enum": ["NOT_SUBMITTED", "PENDING", "CONFIRMED", "FAILED"]
+      },
+      "ResolutionOutcome": {
+        "type": "string",
+        "enum": [
+          "ASSISTED",
+          "REFERRED_TO_EMERGENCY_SERVICES",
+          "NO_CONTACT",
+          "OTHER"
+        ]
+      },
+      "LatLng": {
+        "type": "object",
+        "required": ["latitude", "longitude"],
+        "properties": {
+          "latitude": { "type": "number", "minimum": -90, "maximum": 90 },
+          "longitude": { "type": "number", "minimum": -180, "maximum": 180 }
+        }
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message"],
+            "properties": {
+              "code": { "type": "string" },
+              "message": { "type": "string" },
+              "requestId": { "type": "string" },
+              "details": { "type": "object" }
+            }
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "required": ["id", "displayName", "phone", "role", "createdAt", "updatedAt"],
+        "properties": {
+          "id": { "type": "string" },
+          "displayName": { "type": "string" },
+          "phone": { "type": "string" },
+          "role": { "$ref": "#/components/schemas/Role" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ResponderProfile": {
+        "type": "object",
+        "required": ["id", "userId", "verificationStatus", "capabilities", "available", "completedCount", "reputationScore"],
+        "properties": {
+          "id": { "type": "string" },
+          "userId": { "type": "string" },
+          "verificationStatus": { "$ref": "#/components/schemas/VerificationStatus" },
+          "capabilities": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "available": { "type": "boolean" },
+          "location": { "$ref": "#/components/schemas/LatLng" },
+          "locationUpdatedAt": { "type": "string", "format": "date-time", "nullable": true },
+          "completedCount": { "type": "integer" },
+          "reputationScore": { "type": "integer" }
+        }
+      },
+      "EmergencyOwnerView": {
+        "type": "object",
+        "required": ["id", "category", "status", "location", "version", "createdAt", "updatedAt"],
+        "properties": {
+          "id": { "type": "string" },
+          "ownerId": { "type": "string" },
+          "category": { "$ref": "#/components/schemas/EmergencyCategory" },
+          "status": { "$ref": "#/components/schemas/EmergencyStatus" },
+          "location": { "$ref": "#/components/schemas/LatLng" },
+          "notes": { "type": "string" },
+          "assignedResponderId": { "type": "string", "nullable": true },
+          "version": { "type": "integer" },
+          "escalation": {
+            "type": "object",
+            "properties": {
+              "isEscalated": { "type": "boolean" },
+              "reason": { "type": "string", "nullable": true },
+              "previousStatus": { "type": "string", "nullable": true }
+            }
+          },
+          "resolution": {
+            "type": "object",
+            "properties": {
+              "outcome": { "type": "string", "nullable": true },
+              "note": { "type": "string", "nullable": true },
+              "resolvedAt": { "type": "string", "format": "date-time", "nullable": true }
+            }
+          },
+          "proof": {
+            "type": "object",
+            "properties": {
+              "status": { "$ref": "#/components/schemas/ProofStatus" },
+              "transactionHash": { "type": "string", "nullable": true }
+            }
+          },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "EmergencyPreAcceptanceView": {
+        "type": "object",
+        "required": ["id", "category", "status", "location", "approximateDistanceMeters", "createdAt", "updatedAt"],
+        "properties": {
+          "id": { "type": "string" },
+          "category": { "$ref": "#/components/schemas/EmergencyCategory" },
+          "status": { "$ref": "#/components/schemas/EmergencyStatus" },
+          "location": {
+            "$ref": "#/components/schemas/LatLng",
+            "description": "Coarsened coordinates (~100m grid) for pre-acceptance privacy"
+          },
+          "approximateDistanceMeters": { "type": "integer", "nullable": true },
+          "assignedResponder": { "type": "object", "nullable": true },
+          "escalation": { "type": "object" },
+          "proof": { "type": "object" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health check",
+        "responses": {
+          "200": {
+            "description": "Service is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string", "example": "ok" },
+                    "timestamp": { "type": "string", "format": "date-time" },
+                    "version": { "type": "string", "example": "1.0.0" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/register": {
+      "post": {
+        "summary": "Register a new user",
+        "description": "Registers an elderly user or volunteer responder. Privileged roles (VERIFIER, ADMIN) cannot be self-assigned.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["displayName", "phone", "password", "requestedRole"],
+                "properties": {
+                  "displayName": { "type": "string", "example": "Kamla Devi" },
+                  "phone": { "type": "string", "example": "+919876543210" },
+                  "password": { "type": "string", "minLength": 8, "example": "password123" },
+                  "requestedRole": { "$ref": "#/components/schemas/Role" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Registered successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": { "$ref": "#/components/schemas/User" },
+                    "token": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ErrorResponse" },
+          "409": { "$ref": "#/components/responses/ErrorResponse" }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "summary": "Login with phone and password",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["phone", "password"],
+                "properties": {
+                  "phone": { "type": "string", "example": "+919876543210" },
+                  "password": { "type": "string", "example": "password123" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authentication successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": { "$ref": "#/components/schemas/User" },
+                    "token": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/ErrorResponse" }
+        }
+      }
+    },
+    "/users/me": {
+      "get": {
+        "summary": "Get authenticated user profile",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "user": { "$ref": "#/components/schemas/User" } }
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update authenticated user profile",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "displayName": { "type": "string", "minLength": 1, "maxLength": 100 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "user": { "$ref": "#/components/schemas/User" } }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/responders/me": {
+      "get": {
+        "summary": "Get responder profile of authenticated user",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "profile": { "$ref": "#/components/schemas/ResponderProfile" } }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/responders/me/availability": {
+      "patch": {
+        "summary": "Update responder availability and operational location",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["available"],
+                "properties": {
+                  "available": { "type": "boolean" },
+                  "location": { "$ref": "#/components/schemas/LatLng" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "profile": { "$ref": "#/components/schemas/ResponderProfile" } }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/responders/me/history": {
+      "get": {
+        "summary": "Get responder assistance history",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 20 } }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": { "type": "array", "items": { "type": "object" } },
+                    "page": { "type": "integer" },
+                    "limit": { "type": "integer" },
+                    "total": { "type": "integer" },
+                    "totalPages": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/responders/me/reputation": {
+      "get": {
+        "summary": "Get responder reputation and completed assistance projection",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "completedCount": { "type": "integer" },
+                    "reputationScore": { "type": "integer" },
+                    "verificationStatus": { "$ref": "#/components/schemas/VerificationStatus" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/emergencies": {
+      "post": {
+        "summary": "Create an SOS emergency",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["category", "location"],
+                "properties": {
+                  "category": { "$ref": "#/components/schemas/EmergencyCategory" },
+                  "location": { "$ref": "#/components/schemas/LatLng" },
+                  "notes": { "type": "string", "maxLength": 500 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "emergency": { "$ref": "#/components/schemas/EmergencyOwnerView" } }
+                }
+              }
+            }
+          },
+          "429": { "$ref": "#/components/responses/ErrorResponse" }
+        }
+      }
+    },
+    "/emergencies/nearby": {
+      "get": {
+        "summary": "Get eligible active emergencies nearby (responder only, coarse location)",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "emergencies": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/EmergencyPreAcceptanceView" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": { "$ref": "#/components/responses/ErrorResponse" }
+        }
+      }
+    },
+    "/emergencies/{id}": {
+      "get": {
+        "summary": "Get emergency by ID (permission-filtered)",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "emergency": { "$ref": "#/components/schemas/EmergencyOwnerView" } }
+                }
+              }
+            }
+          },
+          "403": { "$ref": "#/components/responses/ErrorResponse" },
+          "404": { "$ref": "#/components/responses/ErrorResponse" }
+        }
+      }
+    },
+    "/emergencies/{id}/cancel": {
+      "post": {
+        "summary": "Cancel emergency (owner only, active only)",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "emergency": { "$ref": "#/components/schemas/EmergencyOwnerView" } }
+                }
+              }
+            }
+          },
+          "409": { "$ref": "#/components/responses/ErrorResponse" }
+        }
+      }
+    },
+    "/emergencies/{id}/accept": {
+      "post": {
+        "summary": "Atomically accept emergency (verified responder only)",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Emergency accepted; exact coordinates now returned to assigned responder",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "emergency": { "$ref": "#/components/schemas/EmergencyOwnerView" } }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict: emergency already assigned or no longer active",
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    },
+    "/emergencies/{id}/decline": {
+      "post": {
+        "summary": "Decline an emergency notification (verified responder only)",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "message": { "type": "string" } }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/emergencies/{id}/arrive": {
+      "post": {
+        "summary": "Mark arrival at emergency location (assigned responder only)",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "emergency": { "$ref": "#/components/schemas/EmergencyOwnerView" } }
+                }
+              }
+            }
+          },
+          "409": { "$ref": "#/components/responses/ErrorResponse" }
+        }
+      }
+    },
+    "/emergencies/{id}/resolve": {
+      "post": {
+        "summary": "Resolve emergency with outcome (assigned responder only)",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["outcome"],
+                "properties": {
+                  "outcome": { "$ref": "#/components/schemas/ResolutionOutcome" },
+                  "note": { "type": "string", "maxLength": 500 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "emergency": { "$ref": "#/components/schemas/EmergencyOwnerView" } }
+                }
+              }
+            }
+          },
+          "409": { "$ref": "#/components/responses/ErrorResponse" }
+        }
+      }
+    },
+    "/emergencies/{id}/escalate": {
+      "post": {
+        "summary": "Escalate emergency (owner or assigned responder)",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["reason"],
+                "properties": {
+                  "reason": { "type": "string", "minLength": 1, "maxLength": 500 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "emergency": { "$ref": "#/components/schemas/EmergencyOwnerView" } }
+                }
+              }
+            }
+          },
+          "409": { "$ref": "#/components/responses/ErrorResponse" }
+        }
+      }
+    },
+    "/admin/responders/pending": {
+      "get": {
+        "summary": "List pending responder applications (Admin/Verifier only)",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "responders": {
+                      "type": "array",
+                      "items": { "type": "object" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": { "$ref": "#/components/responses/ErrorResponse" }
+        }
+      }
+    },
+    "/admin/responders/{id}/verify": {
+      "post": {
+        "summary": "Verify a responder profile (Admin/Verifier only)",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": { "type": "string", "maxLength": 500 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "profile": { "$ref": "#/components/schemas/ResponderProfile" },
+                    "message": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "403": { "$ref": "#/components/responses/ErrorResponse" }
+        }
+      }
+    },
+    "/admin/responders/{id}/revoke": {
+      "post": {
+        "summary": "Revoke responder verification (Admin/Verifier only)",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["reason"],
+                "properties": {
+                  "reason": { "type": "string", "minLength": 1, "maxLength": 500 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "profile": { "$ref": "#/components/schemas/ResponderProfile" },
+                    "message": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "403": { "$ref": "#/components/responses/ErrorResponse" }
+        }
+      }
+    }
+  },
+  "responses": {
+    "ErrorResponse": {
+      "description": "Standardized error envelope",
+      "content": {
+        "application/json": {
+          "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+        }
+      }
+    }
+  }
+}
