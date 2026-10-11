@@ -6,9 +6,6 @@ import { User } from '../models/User';
 import { ProofOutbox } from '../models/ProofOutbox';
 
 export async function connectDatabase(): Promise<void> {
-  if (mongoose.connection.readyState === 1) {
-    return;
-  }
   try {
     await mongoose.connect(config.mongodb.uri, {
       maxPoolSize: 10,

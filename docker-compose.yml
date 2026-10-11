@@ -27,7 +27,7 @@ services:
       - BLOCKCHAIN_RESPONDER_REGISTRY_ADDRESS=${BLOCKCHAIN_RESPONDER_REGISTRY_ADDRESS:-0x5FbDB2315678afecb367f032d93F642f64180aa3}
       - BLOCKCHAIN_CHAIN_ID=${BLOCKCHAIN_CHAIN_ID:-31337}
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health" ]
       interval: 20s
       timeout: 5s
       retries: 3

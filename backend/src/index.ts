@@ -19,13 +19,14 @@ async function main() {
   // Start the proof outbox worker
   startProofWorker();
 
-  // Start listening
-  server.listen(config.port, () => {
+  // Start listening on all network interfaces (0.0.0.0) so devices on LAN/hotspot/tunnels can connect
+  server.listen(config.port, '0.0.0.0', () => {
     console.log(`
 ╔═══════════════════════════════════════════════╗
 ║           🚨 Sahaay Backend Server            ║
 ╠═══════════════════════════════════════════════╣
 ║  Port:       ${String(config.port).padEnd(33)}║
+║  Host:       ${'0.0.0.0 (All Interfaces)'.padEnd(33)}║
 ║  Env:        ${config.nodeEnv.padEnd(33)}║
 ║  Blockchain: ${config.blockchainMode.padEnd(33)}║
 ╚═══════════════════════════════════════════════╝

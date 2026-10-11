@@ -12,6 +12,7 @@ class AuthProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isInitialized => _isInitialized;
   bool get isAuthenticated => _user != null;
+  String? get token => authService.token;
   bool get isElderly => _user?.isElderly ?? true;
   bool get isResponder => _user?.isResponder ?? false;
 

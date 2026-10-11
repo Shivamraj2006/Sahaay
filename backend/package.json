@@ -8,6 +8,7 @@
     "build": "tsc && node -e \"const fs=require('fs'); fs.mkdirSync('dist/contracts', {recursive:true}); fs.cpSync('src/contracts', 'dist/contracts', {recursive:true});\"",
     "start": "node dist/index.js",
     "seed": "tsx src/scripts/seed.ts",
+    "tunnel": "npx -y localtunnel --port 3000",
     "test": "vitest run",
     "test:watch": "vitest"
   },

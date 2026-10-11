@@ -7,10 +7,12 @@ import 'providers/contacts_provider.dart';
 import 'providers/emergency_provider.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/elderly/elderly_home_screen.dart';
+import 'config/app_config.dart';
 import 'screens/responder/responder_home_screen.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await AppConfig.loadSavedHost();
   runApp(const SahaayApp());
 }
 

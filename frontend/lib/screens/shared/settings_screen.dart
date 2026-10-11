@@ -4,6 +4,7 @@ import '../../constants/app_colors.dart';
 import '../../models/user.dart';
 import '../../providers/auth_provider.dart';
 import '../../config/app_config.dart';
+import '../../widgets/server_config_dialog.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -182,6 +183,23 @@ class SettingsScreen extends StatelessWidget {
                       fontFamily: 'monospace',
                       fontWeight: FontWeight.bold,
                       color: AppColors.slate800,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => ServerConfigDialog.show(context),
+                      icon: const Icon(Icons.tune, size: 16),
+                      label: const Text('Change Server Host / Ping Server'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.brandBlue,
+                        side: const BorderSide(color: AppColors.brandBlue),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
                     ),
                   ),
                 ],

@@ -4,6 +4,8 @@ import '../../constants/app_colors.dart';
 import '../../models/user.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/location_service.dart';
+import '../../config/app_config.dart';
+import '../../widgets/server_config_dialog.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -129,7 +131,44 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const SizedBox(height: 12),
+              // Top Bar: Server Host / Network Config Chip
+              Align(
+                alignment: Alignment.centerRight,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(20),
+                  onTap: () async {
+                    await ServerConfigDialog.show(context);
+                    if (mounted) setState(() {});
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: AppColors.slate100,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: AppColors.slate200),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.dns_outlined, size: 14, color: AppColors.slate600),
+                        const SizedBox(width: 5),
+                        Text(
+                          AppConfig.host.replaceFirst('http://', '').replaceFirst('https://', ''),
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontFamily: 'monospace',
+                            color: AppColors.slate700,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.tune, size: 12, color: AppColors.slate500),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
 
               // App Emblem & Welcome Header
               Center(
