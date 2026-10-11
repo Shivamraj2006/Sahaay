@@ -10,6 +10,7 @@ export interface LatLng {
 export interface AuthUser {
   userId: string;
   role: Role;
+  isGuest?: boolean;
 }
 
 /** Extend Express Request to carry authenticated user. */

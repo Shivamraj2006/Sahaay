@@ -1,11 +1,12 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import { v4 as uuidv4 } from 'uuid';
 import { config } from '../../config';
 import { User } from '../../models/User';
 import { ResponderProfile } from '../../models/ResponderProfile';
 import { PRIVILEGED_ROLES, RESPONDER_ROLES, Role } from '../../shared/enums';
 import { ConflictError, UnauthorizedError, ValidationError } from '../../shared/errors';
-import { RegisterInput, LoginInput } from './auth.validation';
+import { RegisterInput, LoginInput, GuestLoginInput } from './auth.validation';
 
 const SALT_ROUNDS = 12;
 
@@ -38,6 +39,7 @@ export class AuthService {
       phone: input.phone,
       passwordHash,
       role: input.requestedRole,
+      isGuest: false,
     });
 
     // Auto-create responder profile for responder-eligible roles
@@ -45,7 +47,7 @@ export class AuthService {
       await ResponderProfile.create({ userId: user._id });
     }
 
-    const token = this.generateToken(user._id.toString(), user.role);
+    const token = this.generateToken(user._id.toString(), user.role, false);
 
     return { user: user.toJSON(), token };
   }
@@ -59,18 +61,45 @@ export class AuthService {
       throw new UnauthorizedError('Invalid phone number or password.');
     }
 
-    const valid = await bcrypt.compare(input.password, user.passwordHash);
+    if (user.isGuest) {
+      throw new UnauthorizedError('Guest accounts cannot log in with password. Use guest session.');
+    }
+
+    const valid = await bcrypt.compare(input.password, user.passwordHash || '');
     if (!valid) {
       throw new UnauthorizedError('Invalid phone number or password.');
     }
 
-    const token = this.generateToken(user._id.toString(), user.role);
+    const token = this.generateToken(user._id.toString(), user.role, false);
 
     return { user: user.toJSON(), token };
   }
 
-  private generateToken(userId: string, role: Role): string {
-    return jwt.sign({ userId, role }, config.jwt.secret, {
+  /**
+   * Guest bypass / session creation:
+   * Creates a guest user account without requiring password or registered phone.
+   * Assigns role ELDERLY_USER so the guest can trigger SOS and track emergencies.
+   * Responders can NEVER be guest users.
+   */
+  async guestLogin(input?: GuestLoginInput) {
+    const guestSuffix = uuidv4().slice(0, 8);
+    const displayName = input?.displayName?.trim() || `Guest User ${guestSuffix}`;
+    const phone = `guest_${Date.now()}_${guestSuffix}`;
+
+    const user = await User.create({
+      displayName,
+      phone,
+      role: Role.ELDERLY_USER,
+      isGuest: true,
+    });
+
+    const token = this.generateToken(user._id.toString(), user.role, true);
+
+    return { user: user.toJSON(), token };
+  }
+
+  private generateToken(userId: string, role: Role, isGuest = false): string {
+    return jwt.sign({ userId, role, isGuest }, config.jwt.secret, {
       expiresIn: config.jwt.expiresIn as string | number,
     } as jwt.SignOptions);
   }

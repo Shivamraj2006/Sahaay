@@ -16,5 +16,11 @@ export const loginSchema = z.object({
   password: z.string().min(1, 'Password is required'),
 });
 
+export const guestLoginSchema = z.object({
+  displayName: z.string().trim().min(1).max(100).optional(),
+  deviceId: z.string().trim().max(100).optional(),
+});
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
+export type GuestLoginInput = z.infer<typeof guestLoginSchema>;

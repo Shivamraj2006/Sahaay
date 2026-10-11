@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { emergencyService } from './emergencies.service';
 import {
   createEmergencySchema,
+  createGuestEmergencySchema,
   resolveEmergencySchema,
   escalateEmergencySchema,
 } from './emergencies.validation';
@@ -11,6 +12,16 @@ export class EmergenciesController {
     try {
       const input = createEmergencySchema.parse(req.body);
       const result = await emergencyService.create(req.user!, input);
+      res.status(201).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async createGuest(req: Request, res: Response, next: NextFunction) {
+    try {
+      const input = createGuestEmergencySchema.parse(req.body);
+      const result = await emergencyService.createGuestEmergency(input);
       res.status(201).json(result);
     } catch (err) {
       next(err);

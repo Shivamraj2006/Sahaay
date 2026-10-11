@@ -96,6 +96,7 @@
           "displayName": { "type": "string" },
           "phone": { "type": "string" },
           "role": { "$ref": "#/components/schemas/Role" },
+          "isGuest": { "type": "boolean", "default": false },
           "createdAt": { "type": "string", "format": "date-time" },
           "updatedAt": { "type": "string", "format": "date-time" }
         }
@@ -279,6 +280,43 @@
         }
       }
     },
+    "/auth/guest": {
+      "post": {
+        "summary": "Guest user login and session bypass",
+        "description": "Creates a temporary guest user account without requiring phone or password. Issues a JWT token with ELDERLY_USER role for instant SOS use. Strictly forbidden from responder operations.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "displayName": { "type": "string", "example": "Guest User" },
+                  "deviceId": { "type": "string", "example": "device-uuid-123" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Guest session created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": { "$ref": "#/components/schemas/User" },
+                    "token": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ErrorResponse" }
+        }
+      }
+    },
     "/users/me": {
       "get": {
         "summary": "Get authenticated user profile",
@@ -424,6 +462,49 @@
               }
             }
           }
+        }
+      }
+    },
+    "/emergencies/guest": {
+      "post": {
+        "summary": "Guest SOS bypass (trigger emergency without prior login)",
+        "description": "Allows an unauthenticated user/frontend client to immediately trigger an emergency alert. Auto-provisions a guest user session and returns the active emergency along with a guest JWT token for live tracking.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["category", "location"],
+                "properties": {
+                  "category": { "$ref": "#/components/schemas/EmergencyCategory" },
+                  "location": { "$ref": "#/components/schemas/LatLng" },
+                  "notes": { "type": "string", "maxLength": 500 },
+                  "displayName": { "type": "string", "example": "Guest Bystander" },
+                  "contactPhone": { "type": "string", "example": "+919876543210" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Guest emergency triggered successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "emergency": { "$ref": "#/components/schemas/EmergencyOwnerView" },
+                    "user": { "$ref": "#/components/schemas/User" },
+                    "token": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ErrorResponse" },
+          "429": { "$ref": "#/components/responses/ErrorResponse" }
         }
       }
     },

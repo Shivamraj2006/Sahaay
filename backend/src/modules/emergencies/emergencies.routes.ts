@@ -5,6 +5,12 @@ import { emergenciesController } from './emergencies.controller';
 
 const router = Router();
 
+// Guest emergency bypass route: triggers SOS directly without requiring login
+router.post('/guest', sosLimiter, (req, res, next) =>
+  emergenciesController.createGuest(req, res, next),
+);
+
+// All other emergency endpoints require authentication
 router.use(authenticate);
 
 router.post('/', sosLimiter, (req, res, next) => emergenciesController.create(req, res, next));

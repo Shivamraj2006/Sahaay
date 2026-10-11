@@ -17,12 +17,16 @@ import {
   NotFoundError,
   ValidationError,
 } from '../../shared/errors';
+import jwt from 'jsonwebtoken';
+import { v4 as uuidv4 } from 'uuid';
+import { config } from '../../config';
 import { AuthUser, LatLng } from '../../shared/types';
 import { matchingService } from '../matching/matching.service';
 import { trustService } from '../trust/trust.service';
 import { socketService } from '../realtime/socket';
 import {
   CreateEmergencyInput,
+  CreateGuestEmergencyInput,
   ResolveEmergencyInput,
   EscalateEmergencyInput,
 } from './emergencies.validation';
@@ -60,6 +64,80 @@ export class EmergencyService {
     return this.formatForOwner(emergency);
   }
 
+  // ─── Create Guest SOS (Bypass without login) ─────────────────────────
+
+  /**
+   * Bypass route: Create emergency directly without prior login.
+   * Auto-provisions a guest user record with ELDERLY_USER role, creates the active emergency,
+   * dispatches notifications to responders, and returns the emergency along with a guest JWT token
+   * so the frontend client can track status and cancel if needed.
+   */
+  async createGuestEmergency(input: CreateGuestEmergencyInput) {
+    const guestSuffix = uuidv4().slice(0, 8);
+    const displayName = input.displayName?.trim() || `Guest User ${guestSuffix}`;
+    const phone = `guest_${Date.now()}_${guestSuffix}`;
+
+    const guestUser = await User.create({
+      displayName,
+      phone,
+      role: Role.ELDERLY_USER,
+      isGuest: true,
+    });
+
+    const token = jwt.sign(
+      { userId: guestUser._id.toString(), role: guestUser.role, isGuest: true },
+      config.jwt.secret,
+      { expiresIn: config.jwt.expiresIn as string | number } as jwt.SignOptions,
+    );
+
+    const guestAuthUser: AuthUser = {
+      userId: guestUser._id.toString(),
+      role: guestUser.role,
+      isGuest: true,
+    };
+
+    const notesParts: string[] = [];
+    if (input.contactPhone) {
+      notesParts.push(`Contact: ${input.contactPhone}`);
+    }
+    if (input.notes) {
+      notesParts.push(input.notes);
+    }
+    const combinedNotes = notesParts.join(' | ');
+
+    const emergency = await Emergency.create({
+      ownerId: guestUser._id,
+      category: input.category,
+      status: EmergencyStatus.ACTIVE,
+      location: {
+        type: 'Point',
+        coordinates: [input.location.longitude, input.location.latitude],
+      },
+      notes: combinedNotes,
+      version: 1,
+    });
+
+    // Append creation event
+    await this.appendEvent(
+      emergency,
+      guestAuthUser,
+      EmergencyEventType.CREATED,
+      null,
+      EmergencyStatus.ACTIVE,
+    );
+
+    // Notify nearby responders (async — don't block response)
+    this.notifyNearbyResponders(emergency).catch((err) =>
+      console.error('[MATCHING] Notification error:', err),
+    );
+
+    return {
+      emergency: this.formatForOwner(emergency),
+      user: guestUser.toJSON(),
+      token,
+    };
+  }
+
   // ─── Get Emergency (permission-filtered) ──────────────────────────────
 
   async getById(user: AuthUser, emergencyId: string) {
@@ -82,6 +160,9 @@ export class EmergencyService {
   // ─── Nearby (responder-only, coarse location) ────────────────────────
 
   async getNearby(user: AuthUser) {
+    if (user.isGuest) {
+      throw new ForbiddenError('Guest users cannot query responder nearby emergencies.');
+    }
     // Verify this user is a verified, available responder
     const profile = await ResponderProfile.findOne({ userId: user.userId });
     if (!profile) throw new ForbiddenError('No responder profile found.');
@@ -170,6 +251,9 @@ export class EmergencyService {
   // ─── Accept (atomic assignment) ───────────────────────────────────────
 
   async accept(user: AuthUser, emergencyId: string) {
+    if (user.isGuest) {
+      throw new ForbiddenError('Guest users cannot accept emergencies.');
+    }
     // Verify responder eligibility
     const profile = await ResponderProfile.findOne({ userId: user.userId });
     if (!profile) throw new ForbiddenError('No responder profile found.');
@@ -222,6 +306,9 @@ export class EmergencyService {
   // ─── Decline ──────────────────────────────────────────────────────────
 
   async decline(user: AuthUser, emergencyId: string) {
+    if (user.isGuest) {
+      throw new ForbiddenError('Guest users cannot decline emergencies.');
+    }
     const emergency = await Emergency.findById(emergencyId);
     if (!emergency) throw new NotFoundError('Emergency', emergencyId);
     if (emergency.status !== EmergencyStatus.ACTIVE) {
@@ -245,6 +332,9 @@ export class EmergencyService {
   // ─── Arrive ───────────────────────────────────────────────────────────
 
   async arrive(user: AuthUser, emergencyId: string) {
+    if (user.isGuest) {
+      throw new ForbiddenError('Guest users cannot mark arrival.');
+    }
     const emergency = await Emergency.findOneAndUpdate(
       {
         _id: emergencyId,
@@ -291,6 +381,9 @@ export class EmergencyService {
   // ─── Resolve ──────────────────────────────────────────────────────────
 
   async resolve(user: AuthUser, emergencyId: string, input: ResolveEmergencyInput) {
+    if (user.isGuest) {
+      throw new ForbiddenError('Guest users cannot resolve emergencies.');
+    }
     const validFromStatuses = [
       EmergencyStatus.ASSIGNED,
       EmergencyStatus.RESPONDER_ARRIVED,

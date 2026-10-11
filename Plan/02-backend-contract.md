@@ -28,9 +28,10 @@ Use explicit schemas and indexes. The exact schema can evolve if API behavior st
 ### User
 - opaque ID
 - `displayName`
-- normalized phone/login identifier
-- password hash (never plaintext)
-- server-assigned `role`
+- normalized phone/login identifier (unique identifier or `guest_<timestamp>_<id>`)
+- password hash (never plaintext; omitted for guest users)
+- server-assigned `role` (`ELDERLY_USER` for guests)
+- `isGuest` boolean flag (distinguishes temporary guest sessions from registered accounts)
 - optional user preferences
 - `createdAt`, `updatedAt`
 
@@ -77,14 +78,18 @@ Implement the routes and payloads in the shared contract and publish OpenAPI. Va
 
 Expected behavior:
 
+- `POST /auth/guest`: guest user session creation without password/phone registration; issues token with `role: ELDERLY_USER` and `isGuest: true` for frictionless frontend guest mode.
+- `POST /emergencies/guest`: unauthenticated guest SOS bypass route; creates guest user, records emergency, triggers responder notifications, and returns the emergency representation along with a guest JWT token for realtime tracking.
 - `POST /emergencies`: validate category/location, create `ACTIVE` emergency and event record, dispatch notifications, return owner-authorized representation.
-- `GET /emergencies/nearby`: responder-only, eligible active emergencies in the current matching radius; redact exact coordinates and owner contact information.
-- `POST /emergencies/:id/accept`: atomic conditional update, e.g. update only where `_id` matches, status is `ACTIVE`, and assignment is absent. A zero-match means conflict/no longer available.
+- `GET /emergencies/nearby`: responder-only, eligible active emergencies in the current matching radius; redact exact coordinates and owner contact information (strictly rejects guest users with `403 Forbidden`).
+- `POST /emergencies/:id/accept`: atomic conditional update, e.g. update only where `_id` matches, status is `ACTIVE`, and assignment is absent. A zero-match means conflict/no longer available (strictly rejects guest users).
 - `POST /emergencies/:id/cancel`: owner-only and state-guarded; atomically stop unclaimed dispatch when possible. If assignment already succeeded, return a conflict/state-aware response rather than pretending it was cancelled.
-- `POST /emergencies/:id/arrive`: assigned responder only; record append-only event and move to `RESPONDER_ARRIVED`.
-- `POST /emergencies/:id/resolve`: assigned responder only and valid from documented statuses; append resolution event and enqueue proof after the DB transaction succeeds.
+- `POST /emergencies/:id/arrive`: assigned responder only; record append-only event and move to `RESPONDER_ARRIVED` (strictly rejects guest users).
+- `POST /emergencies/:id/resolve`: assigned responder only and valid from documented statuses; append resolution event and enqueue proof after the DB transaction succeeds (strictly rejects guest users).
 - `POST /emergencies/:id/escalate`: authorized emergency owner/assigned responder according to the final permission matrix; retain assignment and history; notify the appropriate parties.
 - verify/revoke routes: verifier/admin only; record audit events and ensure revoked responders are not eligible for new assignments.
+
+**Guest Security Boundary:** Guest users can only use user-level emergency distress features (`POST /emergencies`, `POST /emergencies/guest`, `GET /emergencies/:id`, `POST /emergencies/:id/cancel`, `GET /users/me`). All responder routes (`/responders/*`), nearby emergencies query, and responder actions (`accept`, `arrive`, `resolve`, `decline`) are strictly guarded against guest users and respond with `403 Forbidden`.
 
 Use MongoDB transactions when supported by deployment, or equivalent carefully designed conditional writes and an outbox pattern. Never hold a database transaction open while waiting for blockchain RPC, push notification, or socket delivery.
 

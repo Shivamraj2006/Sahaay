@@ -15,6 +15,10 @@ export function authorize(...allowedRoles: Role[]) {
       return next(new UnauthorizedError());
     }
 
+    if (req.user.isGuest) {
+      return next(new ForbiddenError('Guest users are not authorized for responder operations.'));
+    }
+
     if (!allowed.has(req.user.role)) {
       return next(new ForbiddenError());
     }
